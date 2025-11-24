@@ -1,0 +1,29 @@
+[
+  {
+    "id": "RELAY4CH_124FEC",
+    "name": "Ok broo",
+    "online": true,
+    "switches": [
+      true,
+      false,
+      true,
+      true
+    ],
+    "rememberState": true,
+    "lastSeen": 1763973937263,
+    "ip": "192.168.100.86"
+  },
+  {
+    "id": "RELAY4CH_AF933C",
+    "name": "RELAY4CH AF933C",
+    "online": true,
+    "switches": [
+      true,
+      false,
+      false,
+      true
+    ],
+    "rememberState": true,
+    "lastSeen": 1763973942182
+  }
+]

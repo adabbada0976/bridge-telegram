@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Control</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        h1 { color: white; font-size: 28px; }
+        .btn-header {
+            background: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status-bar {
+            background: white;
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .device-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+        .device-card.visible { animation: slideIn 0.3s; }
+        .device-card.hiding { animation: slideOut 0.3s; }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideOut {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(-20px); }
+        }
+        .device-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .device-name { font-size: 20px; font-weight: bold; }
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-online { background: #4CAF50; color: white; }
+        .status-offline { background: #f44336; color: white; }
+        .status-countdown { background: #FF9800; color: white; }
+        .discovered-device {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .discovered-device .info { flex: 1; }
+        .add-device-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .relay-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .relay-btn {
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .relay-btn.off { background: #e0e0e0; color: #666; }
+        .relay-btn.on { background: #4CAF50; color: white; }
+        .relay-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .modal.show { display: flex; }
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            max-width: 700px;
+            width: 90%;
+            max-height: 85vh;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            animation: slideUp 0.3s;
+        }
+        @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 25px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .modal-header h2 { margin: 0; font-size: 24px; }
+        .close-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            transition: all 0.3s;
+        }
+        .close-btn:hover { background: rgba(255,255,255,0.3); transform: rotate(90deg); }
+        .modal-body {
+            padding: 30px;
+            overflow-y: auto;
+            max-height: calc(85vh - 150px);
+        }
+        .modal-footer {
+            padding: 20px 30px;
+            background: #f8f9fa;
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        /* Tabs */
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 25px;
+            gap: 5px;
+        }
+        .tab {
+            padding: 12px 24px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+            font-size: 15px;
+        }
+        .tab:hover { color: #667eea; background: #f5f5f5; }
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s; }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-secondary { background: #e0e0e0; color: #666; }
+        .btn-success { background: #4CAF50; color: white; }
+        .device-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+        .device-item input {
+            margin-bottom: 5px;
+        }
+        .info-box {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        .alert {
+            padding: 12px 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            border-left: 4px solid;
+            animation: slideIn 0.3s;
+        }
+        @keyframes slideIn { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .alert-success { background: #d4edda; color: #155724; border-color: #28a745; }
+        .alert-error { background: #f8d7da; color: #721c24; border-color: #dc3545; }
+        .alert-info { background: #d1ecf1; color: #0c5460; border-color: #17a2b8; }
+        
+        .detect-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+        .detect-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4); }
+        .detect-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        
+        .input-group {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+        .input-group .form-group { flex: 1; margin-bottom: 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏠 Smart Home Control</h1>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-header" id="scan-btn" onclick="scanDevices()">🔍 Scan</button>
+                <button class="btn-header" onclick="openSettings()">⚙️ Settings</button>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <span id="mqtt-status">🔄 Connecting...</span>
+            <span id="device-count">Devices: 0/0</span>
+        </div>
+        
+        <div class="status-bar" style="cursor: pointer;" onclick="toggleControlMode()">
+            <div>
+                <strong id="mode-title">Control Mode: MQTT Direct</strong><br>
+                <small id="mode-desc">Fast, direct connection</small>
+            </div>
+            <button class="btn-header" style="margin: 0;">🔄 Switch</button>
+        </div>
+
+        <div id="devices-container"></div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ Settings</h2>
+                <button class="close-btn" onclick="closeSettings()">×</button>
+            </div>
+            
+            <div class="modal-body">
+                <div id="alert-container"></div>
+                
+                <!-- Tabs -->
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('mqtt')">📡 MQTT</button>
+                    <button class="tab" onclick="switchTab('blynk')">🔷 Blynk</button>
+                    <button class="tab" onclick="switchTab('devices')">📱 Devices</button>
+                </div>
+                
+                <!-- MQTT Tab -->
+                <div id="tab-mqtt" class="tab-content active">
+                    <div class="info-box">
+                        <strong>ℹ️ WebSocket URL:</strong> Use wss:// for secure or ws:// for non-secure<br>
+                        <strong>Example:</strong> wss://broker.hivemq.com:8884/mqtt
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>MQTT Broker URL</label>
+                        <input type="text" id="mqtt_broker" placeholder="wss://broker.hivemq.com:8884/mqtt">
+                    </div>
+                    <div class="form-group">
+                        <label>Username (optional)</label>
+                        <input type="text" id="mqtt_user">
+                    </div>
+                    <div class="form-group">
+                        <label>Password (optional)</label>
+                        <input type="password" id="mqtt_pass">
+                    </div>
+                    
+                    <div class="info-box" style="background: #fff3cd; margin-top: 20px;">
+                        <strong>🔍 Auto-Detect:</strong> Enter device IP to auto-fill MQTT settings
+                    </div>
+                    <div class="input-group">
+                        <div class="form-group" style="flex: 1;">
+                            <label>Device IP Address</label>
+                            <input type="text" id="detect_ip" placeholder="192.168.1.100">
+                        </div>
+                        <button class="detect-btn" onclick="detectFromIP(event)">🔍 Detect</button>
+                    </div>
+                    <div id="detect-result" style="margin-top: 10px;"></div>
+                </div>
+                
+                <!-- Blynk Tab -->
+                <div id="tab-blynk" class="tab-content">
+                    <div class="info-box">
+                        <strong>ℹ️ Blynk Gateway Mode:</strong><br>
+                        Control devices via Blynk app through gateway. Requires gateway device running.
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Blynk Server</label>
+                        <input type="text" id="blynk_server" placeholder="https://blynk.cloud">
+                    </div>
+                    <div class="form-group">
+                        <label>Blynk Auth Token</label>
+                        <input type="password" id="blynk_token" placeholder="Your gateway auth token">
+                    </div>
+                    
+                    <div class="info-box" style="background: #fff3cd; margin-top: 20px;">
+                        <strong>🔍 Auto-Detect from Gateway:</strong> Enter gateway IP to auto-fill Blynk settings
+                    </div>
+                    <div class="input-group">
+                        <div class="form-group" style="flex: 1;">
+                            <label>Gateway IP Address</label>
+                            <input type="text" id="gateway_ip" placeholder="192.168.1.50">
+                        </div>
+                        <button class="detect-btn" onclick="detectBlynkFromGateway(event)">🔍 Detect Blynk</button>
+                    </div>
+                    <div id="blynk-detect-result" style="margin-top: 10px;"></div>
+                </div>
+                
+                <!-- Devices Tab -->
+                <div id="tab-devices" class="tab-content">
+                    <div class="info-box">
+                        <strong>ℹ️ How to add devices:</strong><br>
+                        1. Use "Auto-Detect" in MQTT tab (easiest)<br>
+                        2. Or manually fill in Device ID from Serial Monitor<br>
+                        3. All 5 slots are always available
+                    </div>
+                    <div id="devices-list"></div>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="saveSettings()">💾 Save Settings</button>
+                <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- Scan Modal -->
+    <div id="scan-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🔍 Scan Devices</h2>
+                <button class="close-btn" onclick="closeScan()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="info-box">
+                    <strong>📱 How to pair:</strong><br>
+                    1. Press pairing button on device for 3 seconds<br>
+                    2. Relay will blink 3 times<br>
+                    3. Click Start Scan button<br>
+                    4. Device will appear automatically
+                </div>
+                <div id="scan-status" style="text-align: center; padding: 20px; color: #666;">
+                    Ready to scan...
+                </div>
+                <div id="discovered-devices"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="start-scan-btn" onclick="startScan()">🔍 Start Scan (5s)</button>
+                <button class="btn btn-secondary" onclick="closeScan()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const MAX_DEVICES = 5;
+        const OFFLINE_TIMEOUT = 20000;
+        let mqttClient;
+        let devices = {};
+        let deviceTimeouts = {};
+        let discoveredDevices = [];
+        let scanTimeout;
+        let config = {
+            mqtt_broker: 'wss://broker.hivemq.com:8884/mqtt',
+            mqtt_user: '',
+            mqtt_pass: '',
+            blynk_server: 'https://blynk.cloud',
+            blynk_token: '',
+            control_mode: 'mqtt',
+            devices: [],
+            gateway: null
+        };
+
+        // Load config from localStorage
+        function loadConfig() {
+            const saved = localStorage.getItem('smartHomeConfig');
+            if (saved) {
+                config = JSON.parse(saved);
+                config.devices.forEach(d => {
+                    devices[d.id] = {
+                        ...d,
+                        online: false,
+                        lastSeen: 0,
+                        countdown: 0,
+                        switches: [false, false, false, false]
+                    };
+                });
+            }
+        }
+
+        // Save config to localStorage
+        function saveConfig() {
+            localStorage.setItem('smartHomeConfig', JSON.stringify(config));
+        }
+
+        // Convert TCP port to WebSocket port
+        function convertToWebSocket(host, port) {
+            const wsPort = port === 1883 ? 8884 : (port === 1884 ? 8083 : port);
+            const protocol = port === 1883 ? 'wss' : 'ws';
+            return `${protocol}://${host}:${wsPort}/mqtt`;
+        }
+
+        // Render devices
+        function renderDevices() {
+            const container = document.getElementById('devices-container');
+            container.innerHTML = '';
+            
+            let onlineCount = 0;
+            Object.values(devices).forEach(device => {
+                if (device.online || device.countdown > 0) {
+                    onlineCount++;
+                    const card = createDeviceCard(device);
+                    container.appendChild(card);
+                }
+            });
+
+            document.getElementById('device-count').textContent = 
+                `Devices: ${onlineCount}/${Object.keys(devices).length}`;
+        }
+        
+        function createDeviceCard(device) {
+            const card = document.createElement('div');
+            card.className = 'device-card visible';
+            card.id = `device-${device.id}`;
+                
+                let statusClass = 'status-online';
+                let statusText = 'Online';
+                if (!device.online && device.countdown > 0) {
+                    statusClass = 'status-countdown';
+                    statusText = `Offline ${device.countdown}s`;
+                } else if (!device.online) {
+                    statusClass = 'status-offline';
+                    statusText = 'Offline';
+                }
+                
+                card.innerHTML = `
+                    <div class="device-header">
+                        <div>
+                            <div class="device-name">${device.name}</div>
+                            <div style="font-size: 11px; color: #999;">${device.id}</div>
+                        </div>
+                        <span class="status-badge ${statusClass}" id="status-${device.id}">${statusText}</span>
+                    </div>
+                    <div class="relay-controls">
+                        ${[1,2,3,4].map(i => `
+                            <button class="relay-btn ${device.switches[i-1] ? 'on' : 'off'}" 
+                                    id="relay-${device.id}-${i}"
+                                    onclick="toggleRelay('${device.id}', ${i})"
+                                    ${!device.online ? 'disabled' : ''}>
+                                💡 Switch ${i}
+                            </button>
+                        `).join('')}
+                    </div>
+                `;
+            return card;
+        }
+        
+        function updateDeviceStatus(deviceId, online) {
+            if (!devices[deviceId]) return;
+            const device = devices[deviceId];
+            const wasOnline = device.online;
+            device.online = online;
+            device.lastSeen = Date.now();
+            
+            if (online) {
+                device.countdown = 0;
+                if (deviceTimeouts[deviceId]) {
+                    clearInterval(deviceTimeouts[deviceId]);
+                    delete deviceTimeouts[deviceId];
+                }
+                
+                const card = document.getElementById(`device-${deviceId}`);
+                if (!card) {
+                    renderDevices();
+                } else {
+                    updateDeviceCard(deviceId);
+                }
+            } else if (wasOnline) {
+                device.countdown = 20;
+                startCountdown(deviceId);
+            }
+        }
+        
+        function startCountdown(deviceId) {
+            if (deviceTimeouts[deviceId]) return;
+            deviceTimeouts[deviceId] = setInterval(() => {
+                const device = devices[deviceId];
+                if (!device) return;
+                device.countdown--;
+                updateDeviceCard(deviceId);
+                if (device.countdown <= 0) {
+                    clearInterval(deviceTimeouts[deviceId]);
+                    delete deviceTimeouts[deviceId];
+                    hideDevice(deviceId);
+                }
+            }, 1000);
+        }
+        
+        function hideDevice(deviceId) {
+            const card = document.getElementById(`device-${deviceId}`);
+            if (card) {
+                card.classList.remove('visible');
+                card.classList.add('hiding');
+                setTimeout(() => {
+                    card.remove();
+                    renderDevices();
+                }, 300);
+            }
+        }
+        
+        function updateDeviceCard(deviceId) {
+            const device = devices[deviceId];
+            if (!device) return;
+            const badge = document.getElementById(`status-${deviceId}`);
+            if (badge) {
+                let statusClass = 'status-online';
+                let statusText = 'Online';
+                if (!device.online && device.countdown > 0) {
+                    statusClass = 'status-countdown';
+                    statusText = `Offline ${device.countdown}s`;
+                } else if (!device.online) {
+                    statusClass = 'status-offline';
+                    statusText = 'Offline';
+                }
+                badge.className = `status-badge ${statusClass}`;
+                badge.textContent = statusText;
+            }
+            for (let i = 1; i <= 4; i++) {
+                const btn = document.getElementById(`relay-${deviceId}-${i}`);
+                if (btn) {
+                    btn.disabled = !device.online;
+                    btn.classList.toggle('on', device.switches[i-1]);
+                    btn.classList.toggle('off', !device.switches[i-1]);
+                }
+            }
+        }
+
+        // Toggle control mode
+        function toggleControlMode() {
+            const modes = ['mqtt', 'blynk', 'local'];
+            const currentIndex = modes.indexOf(config.control_mode);
+            config.control_mode = modes[(currentIndex + 1) % modes.length];
+            
+            saveConfig();
+            updateModeUI();
+        }
+        
+        function updateModeUI() {
+            const title = document.getElementById('mode-title');
+            const desc = document.getElementById('mode-desc');
+            
+            if (config.control_mode === 'mqtt') {
+                title.textContent = 'Control Mode: MQTT Direct';
+                desc.textContent = 'Fast, direct connection';
+            } else if (config.control_mode === 'blynk') {
+                title.textContent = 'Control Mode: Blynk Gateway';
+                desc.textContent = 'Via gateway, works with Blynk app';
+            } else {
+                title.textContent = 'Control Mode: Local HTTP';
+                desc.textContent = 'Direct HTTP to device IP';
+            }
+        }
+
+        // Toggle relay
+        async function toggleRelay(deviceId, switchNum) {
+            const device = devices[deviceId];
+            if (!device || !device.online) return;
+
+            const newState = !device.switches[switchNum - 1];
+            
+            if (config.control_mode === 'mqtt') {
+                // MQTT Direct
+                const topic = `device/${deviceId}/switch${switchNum}`;
+                mqttClient.publish(topic, newState ? '1' : '0');
+            } else if (config.control_mode === 'blynk') {
+                // Blynk Gateway
+                if (!config.blynk_token) {
+                    alert('Blynk token not configured! Go to Settings.');
+                    return;
+                }
+                const message = `${deviceId}|switch${switchNum}|${newState ? '1' : '0'}`;
+                try {
+                    const url = `${config.blynk_server}/external/api/update?token=${config.blynk_token}&V10=${encodeURIComponent(message)}`;
+                    console.log('Blynk request:', url);
+                    const response = await fetch(url);
+                    const text = await response.text();
+                    console.log('Blynk response:', response.status, text);
+                    if (!response.ok) {
+                        alert(`Blynk API Error ${response.status}: ${text}\n\nURL: ${url}`);
+                        throw new Error(`HTTP ${response.status}: ${text}`);
+                    }
+                } catch (error) {
+                    console.error('Blynk error:', error);
+                    if (!error.message.includes('HTTP')) {
+                        alert('Network error. Check internet connection.');
+                    }
+                }
+            } else {
+                // Local HTTP
+                if (!device.ip) {
+                    alert('Device IP not configured! Go to Settings.');
+                    return;
+                }
+                try {
+                    await fetch(`http://${device.ip}/relay`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ relay: switchNum, state: newState ? 1 : 0 })
+                    });
+                } catch (error) {
+                    console.error('Local control error:', error);
+                    alert('Local control failed. Check device IP.');
+                }
+            }
+        }
+
+        // Connect MQTT
+        function connectMQTT() {
+            if (mqttClient) mqttClient.end();
+            
+            const clientId = 'web_' + Math.random().toString(16).substr(2, 8);
+            const options = { clientId };
+            
+            if (config.mqtt_user) {
+                options.username = config.mqtt_user;
+                options.password = config.mqtt_pass;
+            }
+            
+            mqttClient = mqtt.connect(config.mqtt_broker, options);
+
+            mqttClient.on('connect', () => {
+                document.getElementById('mqtt-status').textContent = '✅ MQTT Connected';
+                
+                Object.keys(devices).forEach(deviceId => {
+                    mqttClient.subscribe(`device/${deviceId}/status`);
+                    for (let i = 1; i <= 4; i++) {
+                        mqttClient.subscribe(`device/${deviceId}/switch${i}/state`);
+                    }
+                });
+            });
+
+            mqttClient.on('message', (topic, message) => {
+                const msg = message.toString();
+                
+                if (topic.startsWith('pairing/discover/')) {
+                    try {
+                        const deviceData = JSON.parse(msg);
+                        if (discoveredDevices.find(d => d.id === deviceData.id)) return;
+                        discoveredDevices.push(deviceData);
+                        const container = document.getElementById('discovered-devices');
+                        const div = document.createElement('div');
+                        div.className = 'discovered-device';
+                        div.innerHTML = `
+                            <div class="info">
+                                <div style="font-weight: bold;">${deviceData.type || 'RELAY4CH'}</div>
+                                <div style="font-size: 11px; color: #666; font-family: monospace;">${deviceData.id}</div>
+                                <div style="font-size: 12px; color: #999; margin-top: 5px;">IP: ${deviceData.ip}</div>
+                            </div>
+                            <button class="add-device-btn" onclick='addDiscoveredDevice(${JSON.stringify(deviceData).replace(/'/g, "&apos;")})'>➕ Add</button>
+                        `;
+                        container.appendChild(div);
+                    } catch (e) {}
+                    return;
+                }
+                
+                const match = topic.match(/device\/([^\/]+)\/(.*)/);
+                if (!match) return;
+                const deviceId = match[1];
+                const subtopic = match[2];
+                if (!devices[deviceId]) return;
+
+                if (subtopic === 'status') {
+                    updateDeviceStatus(deviceId, msg === 'online');
+                } else if (subtopic.includes('state')) {
+                    const switchNum = subtopic.match(/switch(\d)/)[1];
+                    devices[deviceId].switches[switchNum - 1] = msg === '1';
+                    updateDeviceCard(deviceId);
+                }
+            });
+
+            mqttClient.on('error', (err) => {
+                document.getElementById('mqtt-status').textContent = '❌ MQTT Error';
+                console.error('MQTT Error:', err);
+            });
+        }
+
+        // Settings Modal
+        function openSettings() {
+            document.getElementById('mqtt_broker').value = config.mqtt_broker;
+            document.getElementById('mqtt_user').value = config.mqtt_user;
+            document.getElementById('mqtt_pass').value = config.mqtt_pass;
+            document.getElementById('blynk_server').value = config.blynk_server;
+            document.getElementById('blynk_token').value = config.blynk_token;
+            
+            renderDevicesList();
+            document.getElementById('settings-modal').classList.add('show');
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-modal').classList.remove('show');
+        }
+
+        function renderDevicesList() {
+            const list = document.getElementById('devices-list');
+            list.innerHTML = '';
+            
+            // Ensure we always show MAX_DEVICES slots
+            const deviceSlots = [];
+            for (let i = 0; i < MAX_DEVICES; i++) {
+                deviceSlots.push(config.devices[i] || null);
+            }
+            
+            deviceSlots.forEach((device, i) => {
+                const div = document.createElement('div');
+                div.className = 'device-item';
+                div.innerHTML = `
+                    <label>Device ${i + 1}</label>
+                    <input type="text" id="device_name_${i}" placeholder="Device Name" 
+                           value="${device ? device.name : ''}">
+                    <input type="text" id="device_id_${i}" placeholder="Device ID (e.g., RELAY4CH_124FEC)" 
+                           value="${device ? device.id : ''}">
+                    <input type="text" id="device_ip_${i}" placeholder="IP Address (optional)" 
+                           value="${device && device.ip ? device.ip : ''}">
+                    ${device ? `<button class="btn btn-secondary" onclick="removeDevice(${i})">Remove</button>` : ''}
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function addDeviceSlot() {
+            // Just re-render, slots are always visible
+            alert('All 5 device slots are always available. Just fill in the empty ones!');
+        }
+
+        function removeDevice(index) {
+            if (confirm('Remove this device?')) {
+                document.getElementById(`device_id_${index}`).value = '';
+                document.getElementById(`device_name_${index}`).value = '';
+                document.getElementById(`device_ip_${index}`).value = '';
+            }
+        }
+
+        async function saveSettings() {
+            config.mqtt_broker = document.getElementById('mqtt_broker').value;
+            config.mqtt_user = document.getElementById('mqtt_user').value;
+            config.mqtt_pass = document.getElementById('mqtt_pass').value;
+            config.blynk_server = document.getElementById('blynk_server').value;
+            config.blynk_token = document.getElementById('blynk_token').value;
+            
+            config.devices = [];
+            devices = {};
+            
+            for (let i = 0; i < MAX_DEVICES; i++) {
+                const id = document.getElementById(`device_id_${i}`).value.trim();
+                const name = document.getElementById(`device_name_${i}`).value.trim();
+                const ip = document.getElementById(`device_ip_${i}`).value.trim();
+                
+                if (id) {
+                    const deviceData = { id, name: name || id, ip };
+                    config.devices.push(deviceData);
+                    devices[id] = {
+                        ...deviceData,
+                        online: false,
+                        lastSeen: 0,
+                        countdown: 0,
+                        switches: [false, false, false, false]
+                    };
+                }
+            }
+            
+            saveConfig();
+            
+            // Sync devices to gateway for Blynk mapping
+            if (config.gateway && config.gateway.ip) {
+                await syncDevicesToGateway();
+            }
+            
+            closeSettings();
+            connectMQTT();
+            renderDevices();
+            showAlert('Settings saved!', 'success');
+        }
+        
+        async function syncDevicesToGateway() {
+            if (!config.gateway || !config.gateway.ip) return;
+            
+            try {
+                const response = await fetch(`http://${config.gateway.ip}/devices`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ devices: config.devices })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log(`✅ Synced ${data.count} devices to gateway`);
+                } else {
+                    console.warn('⚠️ Gateway sync failed (gateway offline?)');
+                }
+            } catch (error) {
+                console.warn('⚠️ Gateway sync failed:', error.message);
+            }
+        }
+
+        // Switch Tab
+        function switchTab(tabName) {
+            // Remove active from all tabs and contents
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            // Add active to selected
+            document.querySelectorAll('.tab').forEach((t, i) => {
+                if ((i === 0 && tabName === 'mqtt') || (i === 1 && tabName === 'blynk') || (i === 2 && tabName === 'devices')) {
+                    t.classList.add('active');
+                }
+            });
+            document.getElementById('tab-' + tabName).classList.add('active');
+        }
+
+        async function detectFromIP(event) {
+            const ip = document.getElementById('detect_ip').value.trim();
+            if (!ip) {
+                showAlert('Please enter device IP address', 'error');
+                return;
+            }
+            
+            const result = document.getElementById('detect-result');
+            const btn = event ? event.target : document.querySelector('.detect-btn');
+            btn.disabled = true;
+            btn.textContent = '🔄 Detecting...';
+            result.innerHTML = '<div class="alert alert-info">🔄 Connecting to device...</div>';
+            
+            try {
+                const response = await fetch(`http://${ip}/mqtt-info`, {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Convert to WebSocket URL
+                const wsUrl = convertToWebSocket(data.mqtt_host, data.mqtt_port);
+                document.getElementById('mqtt_broker').value = wsUrl;
+                document.getElementById('mqtt_user').value = data.mqtt_user || '';
+                
+                // Switch to devices tab
+                switchTab('devices');
+                document.querySelector('.tab:nth-child(3)').click();
+                
+                // Check if device already exists
+                let existingSlot = -1;
+                for (let i = 0; i < MAX_DEVICES; i++) {
+                    const existingId = document.getElementById(`device_id_${i}`).value.trim();
+                    if (existingId === data.device_id) {
+                        existingSlot = i;
+                        break;
+                    }
+                }
+                
+                if (existingSlot >= 0) {
+                    // Device exists - update IP
+                    const oldIP = document.getElementById(`device_ip_${existingSlot}`).value.trim();
+                    document.getElementById(`device_ip_${existingSlot}`).value = ip;
+                    
+                    // Update in config and sync to gateway
+                    const configDevice = config.devices.find(d => d.id === data.device_id);
+                    if (configDevice) {
+                        configDevice.ip = ip;
+                    }
+                    if (devices[data.device_id]) {
+                        devices[data.device_id].ip = ip;
+                    }
+                    saveConfig();
+                    syncDevicesToGateway();
+                    
+                    result.innerHTML = `
+                        <div class="alert alert-success">
+                            ✅ Device already exists - IP updated!<br>
+                            <strong>Device:</strong> ${data.device_id}<br>
+                            <strong>Old IP:</strong> ${oldIP || 'N/A'}<br>
+                            <strong>New IP:</strong> ${ip}<br>
+                            <strong>Slot:</strong> Device ${existingSlot + 1}
+                        </div>
+                    `;
+                    showAlert(`Device IP updated: ${oldIP} \u2192 ${ip}`, 'success');
+                } else {
+                    // Find empty slot for new device
+                    let targetSlot = -1;
+                    for (let i = 0; i < MAX_DEVICES; i++) {
+                        const existingId = document.getElementById(`device_id_${i}`).value.trim();
+                        if (!existingId) {
+                            targetSlot = i;
+                            break;
+                        }
+                    }
+                    
+                    if (targetSlot >= 0) {
+                        document.getElementById(`device_id_${targetSlot}`).value = data.device_id;
+                        document.getElementById(`device_name_${targetSlot}`).value = data.device_id;
+                        document.getElementById(`device_ip_${targetSlot}`).value = ip;
+                        
+                        // Auto-add to devices array and sync to gateway
+                        const deviceData = { id: data.device_id, name: data.device_id, ip: ip };
+                        config.devices.push(deviceData);
+                        devices[data.device_id] = {
+                            ...deviceData,
+                            online: false,
+                            lastSeen: 0,
+                            countdown: 0,
+                            switches: [false, false, false, false]
+                        };
+                        saveConfig();
+                        syncDevicesToGateway();
+                        
+                        result.innerHTML = `
+                            <div class="alert alert-success">
+                                ✅ Successfully detected!<br>
+                                <strong>Broker:</strong> ${data.mqtt_host}:${data.mqtt_port}<br>
+                                <strong>Device:</strong> ${data.device_id}<br>
+                                <strong>WebSocket:</strong> ${wsUrl}<br>
+                                <strong>Added to:</strong> Device slot ${targetSlot + 1}
+                            </div>
+                        `;
+                        showAlert('Device detected and added!', 'success');
+                    } else {
+                        result.innerHTML = `
+                            <div class="alert alert-success">
+                                ✅ Detected but all slots full!<br>
+                                <strong>Broker:</strong> ${data.mqtt_host}:${data.mqtt_port}<br>
+                                <strong>Device:</strong> ${data.device_id}<br>
+                                ⚠️ Please remove a device first
+                            </div>
+                        `;
+                    }
+                }
+            } catch (error) {
+                result.innerHTML = `
+                    <div class="alert alert-error">
+                        ❌ Detection failed<br>
+                        <strong>Error:</strong> ${error.message}<br>
+                        <br>
+                        <strong>Troubleshooting:</strong><br>
+                        • Verify device IP is correct<br>
+                        • Device must be on same network<br>
+                        • Test in browser: http://${ip}/mqtt-info
+                    </div>
+                `;
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '🔍 Detect';
+                }
+            }
+        }
+        
+        async function detectBlynkFromGateway(event) {
+            const ip = document.getElementById('gateway_ip').value.trim();
+            if (!ip) {
+                showAlert('Please enter gateway IP address', 'error');
+                return;
+            }
+            
+            const result = document.getElementById('blynk-detect-result');
+            const btn = event ? event.target : null;
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '🔄 Detecting...';
+            }
+            result.innerHTML = '<div class="alert alert-info">🔄 Connecting to gateway...</div>';
+            
+            try {
+                const response = await fetch(`http://${ip}/mqtt-info`, {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Check if this is a gateway (has Blynk) or relay device (has MQTT)
+                if (data.blynk_server && data.blynk_token) {
+                    // Gateway detected
+                    document.getElementById('blynk_server').value = data.blynk_server;
+                    document.getElementById('blynk_token').value = data.blynk_token;
+                    
+                    // Save/Update Gateway info
+                    let gatewayAction = 'saved';
+                    let oldIP = 'N/A';
+                    const gatewayId = data.device_id || `GATEWAY_${ip.split('.').pop()}`;
+                    
+                    if (config.gateway && config.gateway.ip === ip) {
+                        // Gateway exists - update
+                        oldIP = config.gateway.ip;
+                        gatewayAction = 'updated';
+                    } else {
+                        // New gateway - save
+                        config.gateway = {
+                            id: gatewayId,
+                            ip: ip,
+                            name: 'Gateway'
+                        };
+                    }
+                    
+                    saveConfig();
+                    
+                    result.innerHTML = `
+                        <div class="alert alert-success">
+                            ✅ Gateway detected and ${gatewayAction}!<br>
+                            <strong>Type:</strong> ${data.device_type || 'GATEWAY'}<br>
+                            <strong>IP:</strong> ${ip}<br>
+                            <strong>Blynk Server:</strong> ${data.blynk_server}<br>
+                            <strong>Token:</strong> ${data.blynk_token.substring(0, 8)}...${data.blynk_token.substring(data.blynk_token.length - 4)}
+                        </div>
+                    `;
+                    showAlert(`Gateway ${gatewayAction}! Blynk configured.`, 'success');
+                } else if (data.mqtt_host) {
+                    // This is a relay device, not gateway
+                    result.innerHTML = `
+                        <div class="alert alert-error">
+                            ⚠️ This is a relay device, not a gateway!<br>
+                            Gateway devices have Blynk configuration.<br>
+                            Use the MQTT tab to add relay devices.
+                        </div>
+                    `;
+                } else {
+                    result.innerHTML = `
+                        <div class="alert alert-error">
+                            ⚠️ No Blynk configuration found<br>
+                            This device doesn't have Blynk configured.<br>
+                            Please configure Blynk on the gateway first.
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                result.innerHTML = `
+                    <div class="alert alert-error">
+                        ❌ Detection failed<br>
+                        <strong>Error:</strong> ${error.message}<br>
+                        <br>
+                        <strong>Troubleshooting:</strong><br>
+                        • Verify gateway IP is correct<br>
+                        • Gateway must be on same network<br>
+                        • Test in browser: http://${ip}/mqtt-info
+                    </div>
+                `;
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '🔍 Detect Blynk';
+                }
+            }
+        }
+
+        function showAlert(message, type) {
+            const container = document.getElementById('alert-container');
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => container.innerHTML = '', 3000);
+        }
+        
+        function scanDevices() {
+            document.getElementById('scan-modal').classList.add('show');
+        }
+        
+        function closeScan() {
+            document.getElementById('scan-modal').classList.remove('show');
+            if (scanTimeout) clearTimeout(scanTimeout);
+            if (mqttClient) mqttClient.unsubscribe('pairing/discover/+');
+            document.getElementById('scan-btn').disabled = false;
+        }
+        
+        function startScan() {
+            const status = document.getElementById('scan-status');
+            const container = document.getElementById('discovered-devices');
+            const scanBtn = document.getElementById('scan-btn');
+            const startBtn = document.getElementById('start-scan-btn');
+            
+            discoveredDevices = [];
+            container.innerHTML = '';
+            status.innerHTML = '<div class="alert alert-info">🔄 Scanning for 5 seconds...</div>';
+            scanBtn.disabled = true;
+            startBtn.disabled = true;
+            
+            mqttClient.subscribe('pairing/discover/+');
+            
+            scanTimeout = setTimeout(() => {
+                mqttClient.unsubscribe('pairing/discover/+');
+                scanBtn.disabled = false;
+                startBtn.disabled = false;
+                
+                if (discoveredDevices.length === 0) {
+                    status.innerHTML = '<div class="alert alert-error">❌ No devices found.<br>Press pairing button on device for 3 seconds.</div>';
+                } else {
+                    status.innerHTML = `<div class="alert alert-success">✅ Found ${discoveredDevices.length} device(s)</div>`;
+                }
+            }, 5000);
+        }
+        
+        function addDiscoveredDevice(deviceData) {
+            if (devices[deviceData.id]) {
+                const oldIP = devices[deviceData.id].ip || 'N/A';
+                
+                if (oldIP !== deviceData.ip) {
+                    devices[deviceData.id].ip = deviceData.ip;
+                    
+                    const configDevice = config.devices.find(d => d.id === deviceData.id);
+                    if (configDevice) {
+                        configDevice.ip = deviceData.ip;
+                    }
+                    
+                    saveConfig();
+                    syncDevicesToGateway();
+                    renderDevices();
+                    closeScan();
+                    showAlert(`Device ${deviceData.id} IP updated: ${oldIP} \u2192 ${deviceData.ip}`, 'success');
+                } else {
+                    showAlert('Device already added with same IP!', 'info');
+                }
+                return;
+            }
+            
+            if (Object.keys(devices).length >= MAX_DEVICES) {
+                alert('Maximum 5 devices reached!');
+                return;
+            }
+            
+            const deviceName = (deviceData.type || 'RELAY4CH') + ' ' + deviceData.id.split('_')[1];
+            const deviceConfig = { id: deviceData.id, name: deviceName, ip: deviceData.ip };
+            
+            config.devices.push(deviceConfig);
+            devices[deviceData.id] = {
+                ...deviceConfig,
+                online: false,
+                lastSeen: 0,
+                countdown: 0,
+                switches: [false, false, false, false]
+            };
+            
+            saveConfig();
+            mqttClient.subscribe(`device/${deviceData.id}/status`);
+            for (let i = 1; i <= 4; i++) {
+                mqttClient.subscribe(`device/${deviceData.id}/switch${i}/state`);
+            }
+            
+            // Sync to gateway for Telegram bot
+            syncDevicesToGateway();
+            
+            renderDevices();
+            closeScan();
+            showAlert(`Device ${deviceData.id} added successfully!`, 'success');
+        }
+
+        // Initialize
+        loadConfig();
+        updateModeUI();
+        renderDevices();
+        connectMQTT();
+    </script>
+</body>
+</html>

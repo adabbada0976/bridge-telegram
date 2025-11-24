@@ -1,0 +1,15 @@
+{
+  "name": "bridge-telegram-v1",
+  "version": "1.0.0",
+  "description": "Smart Home Telegram Bot with Auto Discovery & User Management",
+  "main": "bridge.js",
+  "scripts": {
+    "start": "node bridge.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "mqtt": "^5.3.0",
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1"
+  }
+}

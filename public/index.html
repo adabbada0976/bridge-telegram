@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Home Control</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      color: white;
+      margin-bottom: 40px;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .subtitle {
+      font-size: 1.1rem;
+      opacity: 0.9;
+    }
+
+    .devices-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 25px;
+      margin-bottom: 30px;
+    }
+
+    .device-card {
+      background: white;
+      border-radius: 20px;
+      padding: 25px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      transition: transform 0.3s ease;
+    }
+
+    .device-card:hover {
+      transform: translateY(-5px);
+    }
+
+    .device-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+
+    .device-name {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .device-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
+      color: #666;
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ccc;
+      animation: pulse 2s infinite;
+    }
+
+    .status-dot.online {
+      background: #4ade80;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .switches-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+
+    .switch-btn {
+      background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%);
+      border: none;
+      border-radius: 15px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #666;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+
+    .switch-btn:hover {
+      transform: scale(1.05);
+    }
+
+    .switch-btn.on {
+      background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+      color: white;
+      box-shadow: 0 6px 20px rgba(74, 222, 128, 0.4);
+    }
+
+    .switch-btn:active {
+      transform: scale(0.95);
+    }
+
+    .control-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    .control-btn {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.95rem;
+      transition: all 0.3s ease;
+    }
+
+    .btn-on {
+      background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+      color: white;
+    }
+
+    .btn-off {
+      background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+      color: white;
+    }
+
+    .control-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    .footer {
+      text-align: center;
+      color: white;
+      margin-top: 40px;
+      opacity: 0.8;
+    }
+
+    .loading {
+      text-align: center;
+      color: white;
+      font-size: 1.2rem;
+      padding: 50px;
+    }
+
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2rem;
+      }
+
+      .devices-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🏠 Smart Home Control</h1>
+      <p class="subtitle">Control your devices from anywhere</p>
+    </header>
+
+    <div id="devices" class="devices-grid">
+      <div class="loading">Loading devices...</div>
+    </div>
+
+    <div class="footer">
+      <p>Powered by MQTT & Telegram Bot</p>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let devices = [];
+
+    // Load devices
+    async function loadDevices() {
+      const res = await fetch('/api/devices');
+      devices = await res.json();
+      renderDevices();
+    }
+
+    // Render devices
+    function renderDevices() {
+      const container = document.getElementById('devices');
+      
+      if (devices.length === 0) {
+        container.innerHTML = '<div class="loading">No devices found</div>';
+        return;
+      }
+
+      container.innerHTML = devices.map((dev, idx) => `
+        <div class="device-card">
+          <div class="device-header">
+            <div class="device-name">${dev.name}</div>
+            <div class="device-status">
+              <div class="status-dot ${dev.online ? 'online' : ''}"></div>
+              <span>${dev.online ? 'Online' : 'Offline'}</span>
+            </div>
+          </div>
+          
+          <div class="switches-grid">
+            ${dev.switches.map((state, i) => `
+              <button class="switch-btn ${state ? 'on' : ''}" 
+                      onclick="toggleSwitch('${dev.id}', ${i + 1})"
+                      data-device="${dev.id}" 
+                      data-relay="${i + 1}">
+                ${state ? '🟢' : '⚪'} SW${i + 1}
+              </button>
+            `).join('')}
+          </div>
+          
+          <div class="control-buttons">
+            <button class="control-btn btn-on" onclick="allOn('${dev.id}')">
+              🟢 All ON
+            </button>
+            <button class="control-btn btn-off" onclick="allOff('${dev.id}')">
+              🔴 All OFF
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Toggle switch
+    async function toggleSwitch(deviceId, relay) {
+      const device = devices.find(d => d.id === deviceId);
+      const newState = !device.switches[relay - 1];
+      
+      // Optimistic update
+      device.switches[relay - 1] = newState;
+      renderDevices();
+      
+      // Send to server
+      await fetch('/api/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId, relay, state: newState })
+      });
+    }
+
+    // All ON
+    async function allOn(deviceId) {
+      for (let i = 1; i <= 4; i++) {
+        await fetch('/api/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceId, relay: i, state: true })
+        });
+      }
+    }
+
+    // All OFF
+    async function allOff(deviceId) {
+      for (let i = 1; i <= 4; i++) {
+        await fetch('/api/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceId, relay: i, state: false })
+        });
+      }
+    }
+
+    // Socket.IO events
+    socket.on('devices', (data) => {
+      devices = data;
+      renderDevices();
+    });
+
+    socket.on('deviceUpdate', ({ deviceId, relay, state }) => {
+      const device = devices.find(d => d.id === deviceId);
+      if (device) {
+        device.switches[relay - 1] = state;
+        renderDevices();
+      }
+    });
+
+    // Initial load
+    loadDevices();
+  </script>
+</body>
+</html>

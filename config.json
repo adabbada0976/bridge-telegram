@@ -1,0 +1,14 @@
+{
+  "telegram": {
+    "token": "8593005990:AAGySMK0PFRuuhmRYfq6NTe3gVwb3yDhq4k",
+    "adminId": "933101885"
+  },
+  "mqtt": {
+    "broker": "mqtt://broker.hivemq.com",
+    "port": 1883
+  },
+  "passwords": {
+    "device": "device123",
+    "user": "user123"
+  }
+}
