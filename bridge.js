@@ -12,6 +12,9 @@ const ADMIN_ID = config.telegram.adminId;
 const DEVICE_PASSWORD = config.passwords.device;
 const USER_PASSWORD = config.passwords.user;
 
+// Public URL for Railway deployment (set after deploy)
+const PUBLIC_URL = process.env.PUBLIC_URL || null;
+
 // Load data
 let devices = JSON.parse(fs.readFileSync('devices.json', 'utf8'));
 let users = JSON.parse(fs.readFileSync('users.json', 'utf8'));
@@ -274,8 +277,10 @@ function getDeviceKeyboard(page = 0) {
     buttons.push(navButtons);
   }
   
+  const webUrl = PUBLIC_URL ? `${PUBLIC_URL}/control-web-v2.html` : `http://${getLocalIP()}:${PORT}/control-web-v2.html`;
+  
   buttons.push([
-    { text: '🌐 Bridge Web', url: `http://${getLocalIP()}:3000/control-web-v2.html` },
+    { text: '🌐 Bridge Web', url: webUrl },
     { text: '📱 Device Web', callback_data: 'webui' }
   ]);
   
@@ -496,13 +501,14 @@ bot.onText(/\/webui/, (msg) => {
     return;
   }
   
-  const localIP = getLocalIP();
+  const webUrl = PUBLIC_URL || `http://${getLocalIP()}:${PORT}`;
+  
   let text = '🌐 *Web UI Access*\n\n';
   text += '*Bridge Web UI:*\n';
-  text += `http://${localIP}:3000/control-web-v2.html\n\n`;
+  text += `${webUrl}/control-web-v2.html\n\n`;
   
   const buttons = [[
-    { text: '🌐 Open Bridge Web', url: `http://${localIP}:3000/control-web-v2.html` }
+    { text: '🌐 Open Bridge Web', url: webUrl }
   ]];
   
   if (devices.length > 0) {
@@ -1305,7 +1311,7 @@ io.on('connection', (socket) => {
 
 
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const os = require('os');
 
 // Get local IP
